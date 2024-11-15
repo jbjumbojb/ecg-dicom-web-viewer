@@ -18,19 +18,52 @@
             var input = document.getElementById("files"), output = document.getElementById('output');
 
             // Eventhandler for file input. 
+            window.addEventListener('load', () => {
+                // Function to extract query parameters
+                function getQueryParameter(name) {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    return urlParams.get(name);
+                }
+
+                // Check if `url` parameter exists in the query string
+                const fileUrl = getQueryParameter('url');
+                if (fileUrl) {
+                    // Fetch the file from the specified URL
+                    fetch(fileUrl)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('Network response was not ok');
+                            }
+                            return response.blob();
+                        })
+                        .then(blob => {
+                            // Simulate file selection to trigger openfile function
+                            openfile({ fileBlob: blob });
+                        })
+                        .catch(error => {
+                            console.error('Error fetching file:', error);
+                        });
+                }
+            });
+
             function openfile(evt) {
-                var files = input.files;
-                // Pass the file to the blob, not the input[0].
-                fileData = new Blob([files[0]]);
-                // Pass getBuffer to promise.
+                var fileData;
+                if (evt.fileBlob) {
+                    // Use the Blob passed from the fetch
+                    fileData = evt.fileBlob;
+                } else {
+                    // Handle files selected from input
+                    var files = evt.target.files;
+                    fileData = new Blob([files[0]]);
+                }
+
+                // Create a Promise to handle the file data
                 var promise = new Promise(getBuffer(fileData));
-                // Wait for promise to be resolved, or log error.
                 promise.then(function(data) {
-                // Here you can pass the bytes to another function.
-                output.innerHTML = data.toString();
-                console.log(data);
+                    output.innerHTML = data.toString();
+                    console.log(data);
                 }).catch(function(err) {
-                console.log('Error: ',err);
+                    console.log('Error:', err);
                 });
             }
 
@@ -39,10 +72,9 @@
                     var reader = new FileReader();
                     reader.readAsArrayBuffer(fileData);
                     reader.onload = function() {
-                    var arrayBuffer = reader.result
-                    console.log($)
-                    let viewer = new $.DicomECGViewer(arrayBuffer, "ecgView", '0');
-                    viewer.loadCanvas();
+                        var arrayBuffer = reader.result;
+                        let viewer = new $.DicomECGViewer(arrayBuffer, "ecgView", '0');
+                        viewer.loadCanvas();
                     }
                 }
             }
