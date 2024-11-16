@@ -1,84 +1,120 @@
 <!DOCTYPE html>
 
 <html>
-    <head>
-        <link rel="stylesheet" href="index.css" />
-    </head>
 
-    <body>
+<head>
+    <link rel="stylesheet" href="index.css" />
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+
+<body>
+    <div>
         <div>
-            <div>
-                <input type="file" id="files" />
-            </div>
-            <!--<div id="canvasECG" style="height: 100%;"></div>-->
-            <div id="ecgView"></div>
+            <input type="file" id="files" />
         </div>
-        <script src="index.umd.js"></script>    
-        <script type="application/javascript">
-            var input = document.getElementById("files"), output = document.getElementById('output');
+        <!--<div id="canvasECG" style="height: 100%;"></div>-->
+        <div id="ecgView"></div>
+    </div>
+    <script src="index.umd.js"></script>
+    <script type="application/javascript">
+        var input = document.getElementById("files"), output = document.getElementById('output');
 
-            // Eventhandler for file input. 
-            window.addEventListener('load', () => {
-                // Function to extract query parameters
-                function getQueryParameter(name) {
-                    const urlParams = new URLSearchParams(window.location.search);
-                    return urlParams.get(name);
-                }
+        // Eventhandler for file input. 
+        window.addEventListener('load', () => {
+            // Function to extract query parameters
+            function getQueryParameter(name) {
+                const urlParams = new URLSearchParams(window.location.search);
+                return urlParams.get(name);
+            }
 
-                // Check if `url` parameter exists in the query string
-                const fileUrl = getQueryParameter('url');
-                if (fileUrl) {
-                    // Fetch the file from the specified URL
-                    fetch(fileUrl)
-                        .then(response => {
-                            if (!response.ok) {
-                                throw new Error('Network response was not ok');
-                            }
-                            return response.blob();
-                        })
-                        .then(blob => {
-                            // Simulate file selection to trigger openfile function
-                            openfile({ fileBlob: blob });
-                        })
-                        .catch(error => {
-                            console.error('Error fetching file:', error);
-                        });
-                }
+            // Check if `manifest` or `url` parameter exists in the query string
+            const manifestUrl = getQueryParameter('manifest');
+            const fileUrl = getQueryParameter('url');
+
+            if (manifestUrl) {
+                // Fetch the manifest XML file
+                axios.get(manifestUrl)
+                    .then(response => {
+                        let xmlParser = new DOMParser();
+                        // Parse the XML response
+                        let xml = xmlParser.parseFromString(response.data, 'text/xml');
+
+                        // Get the first 'DirectDownloadFile' from XML
+                        let baseUrl = xml.querySelector('arcQuery').getAttribute('baseUrl');
+                        let firstInstance = xml.querySelector('Instance');
+                        let directDownloadFile = firstInstance.getAttribute('DirectDownloadFile');
+
+                        // If the DirectDownloadFile exists, fetch the DICOM file
+                        if (directDownloadFile) {
+                            axios.get(baseUrl + directDownloadFile, { responseType: 'blob' })
+                                .then(responseFile => {
+                                    // Create a DICOM file from the blob data
+                                    const studies = new File([responseFile.data], '1.dcm', { type: 'application/dicom' });
+                                    if (studies) {
+                                        // Simulate the file input to call the openfile function
+                                        openfile({ fileBlob: studies });
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error fetching DICOM file:', error);
+                                });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching manifest:', error);
+                    });
+            }
+            else if (fileUrl) {
+                // If `url` parameter is present, fetch the DICOM file directly
+                axios.get(fileUrl, { responseType: 'blob' })
+                    .then(responseFile => {
+                        const studies = new File([responseFile.data], '1.dcm', { type: 'application/dicom' });
+                        if (studies) {
+                            // Simulate the file input to call the openfile function
+                            openfile({ fileBlob: studies });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching DICOM file from URL:', error);
+                    });
+            }
+        });
+
+        // Function to open the file (either from input or URL)
+        function openfile(evt) {
+            var fileData;
+            if (evt.fileBlob) {
+                // Use the Blob passed from the fetch
+                fileData = evt.fileBlob;
+            } else {
+                // Handle files selected from input
+                var files = evt.target.files;
+                fileData = new Blob([files[0]]);
+            }
+
+            // Create a Promise to handle the file data
+            var promise = new Promise(getBuffer(fileData));
+            promise.then(function (data) {
+                output.innerHTML = data.toString();
+                console.log(data);
+            }).catch(function (err) {
+                console.log('Error:', err);
             });
+        }
 
-            function openfile(evt) {
-                var fileData;
-                if (evt.fileBlob) {
-                    // Use the Blob passed from the fetch
-                    fileData = evt.fileBlob;
-                } else {
-                    // Handle files selected from input
-                    var files = evt.target.files;
-                    fileData = new Blob([files[0]]);
-                }
-
-                // Create a Promise to handle the file data
-                var promise = new Promise(getBuffer(fileData));
-                promise.then(function(data) {
-                    output.innerHTML = data.toString();
-                    console.log(data);
-                }).catch(function(err) {
-                    console.log('Error:', err);
-                });
-            }
-
-            function getBuffer(fileData) {
-                return function(resolve) {
-                    var reader = new FileReader();
-                    reader.readAsArrayBuffer(fileData);
-                    reader.onload = function() {
-                        var arrayBuffer = reader.result;
-                        let viewer = new $.DicomECGViewer(arrayBuffer, "ecgView", '0');
-                        viewer.loadCanvas();
-                    }
+        function getBuffer(fileData) {
+            return function (resolve) {
+                var reader = new FileReader();
+                reader.readAsArrayBuffer(fileData);
+                reader.onload = function () {
+                    var arrayBuffer = reader.result;
+                    let viewer = new $.DicomECGViewer(arrayBuffer, "ecgView", '0');
+                    viewer.loadCanvas();
                 }
             }
-            document.getElementById('files').addEventListener('change', openfile, false);
-        </script>
-    </body>
+        }
+        document.getElementById('files').addEventListener('change', openfile, false);
+    </script>
+</body>
+
 </html>
